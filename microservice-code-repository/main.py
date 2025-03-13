@@ -6,10 +6,9 @@ import shutil
 # Load environment variables from the .env file
 load_dotenv()
 
-# Directory where repositories will be cloned
-BASE_DIR = "./repositories"
-os.makedirs(BASE_DIR, exist_ok=True)
-
+# Directory where repositories will be cloned (outside microservice-code-repository, directly in Plagiarism-detector)
+BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'repositories')
+os.makedirs(BASE_DIR, exist_ok=True) 
 # Function to retrieve repository URLs from the environment variables
 def get_repository_urls():
     """
