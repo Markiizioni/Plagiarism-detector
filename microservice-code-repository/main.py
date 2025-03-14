@@ -3,13 +3,23 @@ from git import Repo
 from dotenv import load_dotenv
 import shutil
 
+# Import the utility functions
+from utilities import get_file_extension, create_repository_and_add_file
+
 # Load environment variables from the .env file
 load_dotenv()
 
-# Directory where repositories will be cloned (outside microservice-code-repository, directly in Plagiarism-detector)
-BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'repositories')
-os.makedirs(BASE_DIR, exist_ok=True) 
-# Function to retrieve repository URLs from the environment variables
+# Set the base directory where repositories will be cloned
+if '__file__' in globals():
+    BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'repositories')
+else:
+    BASE_DIR = os.path.join(os.getcwd(), 'repositories')  # Default to current working directory
+
+# Create the 'repositories' folder if it does not exist
+if not os.path.exists(BASE_DIR):
+    os.makedirs(BASE_DIR)
+
+# Function to retrieve repository URLs from environment variables
 def get_repository_urls():
     """
     Retrieves the list of GitHub repository URLs from environment variables dynamically.
@@ -25,7 +35,7 @@ def get_repository_urls():
 
 def clone_repositories():
     """
-    Clones repositories listed in the .env file and stores them locally.
+    Clones repositories listed in the .env file and processes the files to move them into respective folders.
     """
     repos = get_repository_urls()
 
@@ -49,6 +59,14 @@ def clone_repositories():
             # Clone the repository
             Repo.clone_from(repo_url, repo_path)
             cloned_repos.append(repo_name)
+
+            # Now go through the files and move them to the right directories
+            for root, _, files in os.walk(repo_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    # Create a repository structure based on file extension
+                    create_repository_and_add_file(file_path)
+
         except Exception as e:
             failed_repos.append(repo_name)
 
@@ -70,5 +88,5 @@ def remove_repository(repo_name: str):
     shutil.rmtree(repo_path)
     print(f"Repository {repo_name} removed successfully!")
 
-# Run the function in the script
+# Run the function to clone repositories and organize files
 clone_repositories()
