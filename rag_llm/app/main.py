@@ -21,8 +21,7 @@ from app.background_tasks import (
     run_clone_thread,
     run_embedding_thread
 )
-
-from app.similarity_threshold import SimilarityAnalyzer
+from app.llm_plagiarism_detector import LLMPlagiarismDetector
 
 # Load environment variables
 load_dotenv()
@@ -51,12 +50,10 @@ app.add_middleware(
 # Initialize vector store
 vector_store = create_vector_store()
 
-# Initialize similarity analyzer with default thresholds
-
-similarity_analyzer = SimilarityAnalyzer(
-    high_similarity_threshold=float(os.getenv("HIGH_SIMILARITY_THRESHOLD", "0.85")),
-    medium_similarity_threshold=float(os.getenv("MEDIUM_SIMILARITY_THRESHOLD", "0.70")),
-    low_similarity_threshold=float(os.getenv("LOW_SIMILARITY_THRESHOLD", "0.55"))
+# Initialize LLM-based plagiarism detector
+llm_detector = LLMPlagiarismDetector(
+    model=os.getenv("OPENAI_MODEL", "gpt-3.5-turbo"),
+    temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
 )
 
 # Try to load existing vector store on startup
@@ -69,20 +66,9 @@ except Exception as e:
 class RepositoryRequest(BaseModel):
     repo_urls: list[str] = []
     
-class QueryRequest(BaseModel):
-    query: str
-    top_k: int = 5
-    analyze_plagiarism: bool = False  # New field to control plagiarism analysis
-
-class CodeSimilarityRequest(BaseModel):
+class PlagiarismCheckRequest(BaseModel):
     code: str
-    top_k: int = 10
-    analyze_plagiarism: bool = True  # Default to true for code similarity checks
-
-class ThresholdConfig(BaseModel):
-    high_threshold: float = 0.85
-    medium_threshold: float = 0.70
-    low_threshold: float = 0.55
+    top_k: int = 5  # Number of similar code chunks to check
 
 # Async thread wrapper functions
 async def run_clone_pipeline_in_thread(embed=True):
@@ -93,16 +79,6 @@ async def run_clone_pipeline_in_thread(embed=True):
     thread.daemon = True
     thread.start()
     logger.info("Started clone process in background thread")
-    return
-
-async def run_embedding_in_thread():
-    """
-    Run the embedding process in a separate thread to avoid blocking the API.
-    """
-    thread = threading.Thread(target=run_embedding_thread)
-    thread.daemon = True
-    thread.start()
-    logger.info("Started embedding process in background thread")
     return
 
 @app.get("/")
@@ -141,10 +117,10 @@ async def clone_repos(
             # Use environment variables
             repo_source = "environment"
         
-        # Update status to cloning
+        # ✅ Correct progress update
         update_progress(status="cloning", processed_files=0, total_files=0, current_file="Initializing")
         
-        # Run the cloning in the background using a thread
+        # ✅ Run cloning (and optional embedding) in background thread
         background_tasks.add_task(run_clone_pipeline_in_thread, embed)
         
         return {
@@ -294,108 +270,24 @@ async def get_progress():
         logger.error(f"Error getting progress: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-@app.post("/search")
-async def search_code(query_request: QueryRequest):
+@app.post("/check-plagiarism")
+async def check_plagiarism(request: PlagiarismCheckRequest):
     """
-    Search for code chunks similar to the query.
+    Check if the provided code is plagiarized by finding similar code chunks
+    and analyzing them with an LLM.
     
     Args:
-        query_request: Query request containing query text and top_k
-    """
-    try:
-        # Check if vector store is loaded
-        if vector_store.index is None:
-            # Try loading it
-            try:
-                loaded = vector_store.load()
-                if not loaded:
-                    return {"message": "Vector store is empty or not initialized", "results": []}
-            except Exception as e:
-                logger.error(f"Failed to load vector store: {str(e)}")
-                return {"message": "Failed to load vector store", "results": []}
-        
-        # Get embedding for the query
-        query_embedding = get_embedding(query_request.query)
-        
-        # Search for similar code chunks
-        results = vector_store.search(query_embedding, query_request.top_k)
-        
-        # Apply plagiarism analysis if requested
-        if query_request.analyze_plagiarism:
-            plagiarism_analysis = similarity_analyzer.analyze_search_results(results)
-            return {
-                "message": f"Found {len(results)} similar code chunks",
-                "query": query_request.query,
-                "results": plagiarism_analysis["results"],
-                "plagiarism_analysis": {
-                    "summary": plagiarism_analysis["analysis"],
-                    "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
-                    "suspicious": plagiarism_analysis.get("suspicious", False),
-                    "high_similarity_count": plagiarism_analysis["high_similarity_count"],
-                    "medium_similarity_count": plagiarism_analysis["medium_similarity_count"],
-                    "low_similarity_count": plagiarism_analysis["low_similarity_count"]
-                }
-            }
-        else:
-            return {
-                "message": f"Found {len(results)} similar code chunks",
-                "query": query_request.query,
-                "results": results
-            }
-    except Exception as e:
-        logger.error(f"Error searching code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@app.post("/embed")
-async def embed_repositories(background_tasks: BackgroundTasks):
-    """
-    Create embeddings for all code files in the repositories directory.
-    This is useful when you've already cloned repositories but want to update embeddings.
-    """
-    # Check if process is already running
-    progress_data = load_progress()
-    if progress_data["status"] != "idle":
-        return {
-            "message": "Another operation is already in progress",
-            "current_status": progress_data["status"],
-            "details": "Please wait for the current operation to complete"
-        }
-    
-    try:
-        # Update status to embedding
-        update_progress(status="embedding", processed_files=0, total_files=0, current_file="Initializing")
-        
-        # Run the embedding in the background using a thread
-        background_tasks.add_task(run_embedding_in_thread)
-        
-        return {
-            "message": "Repository embedding started",
-            "status": "processing"
-        }
-    except Exception as e:
-        update_progress(status="idle")
-        logger.error(f"Error starting repository embedding: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to start repository embedding: {str(e)}")
-
-@app.post("/similar-code")
-async def find_similar_code(request: CodeSimilarityRequest):
-    """
-    Find code chunks similar to the provided code snippet.
-    
-    Args:
-        request: Code similarity request containing the code and top_k
+        request: Code to check for plagiarism and parameters
     """
     # Ensure vector store is loaded
     if vector_store.index is None:
-        loaded = False
         try:
             loaded = vector_store.load()
+            if not loaded:
+                return {"message": "Vector store is empty or not initialized", "results": []}
         except Exception as e:
             logger.error(f"Failed to load vector store: {str(e)}")
             return {"message": "Failed to load vector store", "results": []}
-        
-        if not loaded:
-            return {"message": "Vector store is empty or not initialized", "results": []}
 
     try:
         # Get embedding for the code
@@ -404,36 +296,23 @@ async def find_similar_code(request: CodeSimilarityRequest):
         # Search for similar code chunks
         results = vector_store.search(code_embedding, request.top_k)
         
-        # Apply plagiarism analysis if requested (default is True for this endpoint)
-        if request.analyze_plagiarism:
-            plagiarism_analysis = similarity_analyzer.analyze_search_results(results)
-            summary = similarity_analyzer.get_plagiarism_summary("Submitted code", plagiarism_analysis)
-            
-            return {
-                "message": f"Found {len(results)} similar code chunks",
-                "query_code_length": len(request.code),
-                "results": plagiarism_analysis["results"],
-                "plagiarism_analysis": {
-                    "summary": plagiarism_analysis["analysis"],
-                    "human_readable_summary": summary,
-                    "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
-                    "suspicious": plagiarism_analysis.get("suspicious", False),
-                    "high_similarity_count": plagiarism_analysis["high_similarity_count"],
-                    "medium_similarity_count": plagiarism_analysis["medium_similarity_count"],
-                    "low_similarity_count": plagiarism_analysis["low_similarity_count"]
-                }
+        # Apply LLM-based plagiarism analysis
+        plagiarism_analysis = llm_detector.analyze_similarity(request.code, results)
+        
+        return {
+            "message": f"Found {len(results)} similar code chunks",
+            "code_length": len(request.code),
+            "results": plagiarism_analysis["results"],
+            "plagiarism_analysis": {
+                "summary": plagiarism_analysis["analysis"],
+                "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
+                "confidence": plagiarism_analysis.get("confidence", 0.0),
+                "model_used": plagiarism_analysis.get("llm_model", "unknown")
             }
-        else:
-            return {
-                "message": f"Found {len(results)} similar code chunks",
-                "query_code_length": len(request.code),
-                "results": results
-            }
-
+        }
     except Exception as e:
-        logger.error(f"Error finding similar code: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-    
+        logger.error(f"Error checking plagiarism: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Plagiarism check failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
