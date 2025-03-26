@@ -22,6 +22,8 @@ from app.background_tasks import (
     run_embedding_thread
 )
 
+from app.similarity_threshold import SimilarityAnalyzer
+
 # Load environment variables
 load_dotenv()
 
@@ -49,6 +51,14 @@ app.add_middleware(
 # Initialize vector store
 vector_store = create_vector_store()
 
+# Initialize similarity analyzer with default thresholds
+
+similarity_analyzer = SimilarityAnalyzer(
+    high_similarity_threshold=float(os.getenv("HIGH_SIMILARITY_THRESHOLD", "0.85")),
+    medium_similarity_threshold=float(os.getenv("MEDIUM_SIMILARITY_THRESHOLD", "0.70")),
+    low_similarity_threshold=float(os.getenv("LOW_SIMILARITY_THRESHOLD", "0.55"))
+)
+
 # Try to load existing vector store on startup
 try:
     vector_store.load()
@@ -62,10 +72,17 @@ class RepositoryRequest(BaseModel):
 class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
+    analyze_plagiarism: bool = False  # New field to control plagiarism analysis
 
 class CodeSimilarityRequest(BaseModel):
     code: str
     top_k: int = 10
+    analyze_plagiarism: bool = True  # Default to true for code similarity checks
+
+class ThresholdConfig(BaseModel):
+    high_threshold: float = 0.85
+    medium_threshold: float = 0.70
+    low_threshold: float = 0.55
 
 # Async thread wrapper functions
 async def run_clone_pipeline_in_thread(embed=True):
@@ -303,11 +320,28 @@ async def search_code(query_request: QueryRequest):
         # Search for similar code chunks
         results = vector_store.search(query_embedding, query_request.top_k)
         
-        return {
-            "message": f"Found {len(results)} similar code chunks",
-            "query": query_request.query,
-            "results": results
-        }
+        # Apply plagiarism analysis if requested
+        if query_request.analyze_plagiarism:
+            plagiarism_analysis = similarity_analyzer.analyze_search_results(results)
+            return {
+                "message": f"Found {len(results)} similar code chunks",
+                "query": query_request.query,
+                "results": plagiarism_analysis["results"],
+                "plagiarism_analysis": {
+                    "summary": plagiarism_analysis["analysis"],
+                    "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
+                    "suspicious": plagiarism_analysis.get("suspicious", False),
+                    "high_similarity_count": plagiarism_analysis["high_similarity_count"],
+                    "medium_similarity_count": plagiarism_analysis["medium_similarity_count"],
+                    "low_similarity_count": plagiarism_analysis["low_similarity_count"]
+                }
+            }
+        else:
+            return {
+                "message": f"Found {len(results)} similar code chunks",
+                "query": query_request.query,
+                "results": results
+            }
     except Exception as e:
         logger.error(f"Error searching code: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
@@ -351,31 +385,55 @@ async def find_similar_code(request: CodeSimilarityRequest):
     Args:
         request: Code similarity request containing the code and top_k
     """
-    try:
-        # Check if vector store is loaded
-        if vector_store.index is None:
-            try:
-                loaded = vector_store.load()
-                if not loaded:
-                    return {"message": "Vector store is empty or not initialized", "results": []}
-            except Exception as e:
-                logger.error(f"Failed to load vector store: {str(e)}")
-                return {"message": "Failed to load vector store", "results": []}
+    # Ensure vector store is loaded
+    if vector_store.index is None:
+        loaded = False
+        try:
+            loaded = vector_store.load()
+        except Exception as e:
+            logger.error(f"Failed to load vector store: {str(e)}")
+            return {"message": "Failed to load vector store", "results": []}
         
+        if not loaded:
+            return {"message": "Vector store is empty or not initialized", "results": []}
+
+    try:
         # Get embedding for the code
         code_embedding = get_embedding(request.code)
         
         # Search for similar code chunks
         results = vector_store.search(code_embedding, request.top_k)
         
-        return {
-            "message": f"Found {len(results)} similar code chunks",
-            "query_code_length": len(request.code),
-            "results": results
-        }
+        # Apply plagiarism analysis if requested (default is True for this endpoint)
+        if request.analyze_plagiarism:
+            plagiarism_analysis = similarity_analyzer.analyze_search_results(results)
+            summary = similarity_analyzer.get_plagiarism_summary("Submitted code", plagiarism_analysis)
+            
+            return {
+                "message": f"Found {len(results)} similar code chunks",
+                "query_code_length": len(request.code),
+                "results": plagiarism_analysis["results"],
+                "plagiarism_analysis": {
+                    "summary": plagiarism_analysis["analysis"],
+                    "human_readable_summary": summary,
+                    "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
+                    "suspicious": plagiarism_analysis.get("suspicious", False),
+                    "high_similarity_count": plagiarism_analysis["high_similarity_count"],
+                    "medium_similarity_count": plagiarism_analysis["medium_similarity_count"],
+                    "low_similarity_count": plagiarism_analysis["low_similarity_count"]
+                }
+            }
+        else:
+            return {
+                "message": f"Found {len(results)} similar code chunks",
+                "query_code_length": len(request.code),
+                "results": results
+            }
+
     except Exception as e:
         logger.error(f"Error finding similar code: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+    
 
 if __name__ == "__main__":
     import uvicorn
