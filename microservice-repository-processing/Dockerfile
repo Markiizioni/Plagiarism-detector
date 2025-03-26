@@ -19,12 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Create necessary directories
 RUN mkdir -p /app/repositories /app/vector_store
 
-# Create the app directory structure
-RUN mkdir -p /app/app
-
-# Copy the application code
-COPY *.py /app/
-COPY app/*.py /app/app/
+# Copy the entire app directory
+COPY app /app/app
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -32,5 +28,5 @@ ENV PYTHONPATH=/app
 # Expose the port that FastAPI will run on
 EXPOSE 8000
 
-# Run the application
+# Run the application (this is correct since main.py is in app directory)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
