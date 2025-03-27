@@ -67,8 +67,33 @@ class RepositoryRequest(BaseModel):
     repo_urls: list[str] = []
     
 class PlagiarismCheckRequest(BaseModel):
+    """
+    Request model for plagiarism check.
+    
+    Attributes:
+        code: The source code to check for plagiarism. Can be multi-line.
+        top_k: Number of similar code chunks to check.
+    """
     code: str
     top_k: int = 5  # Number of similar code chunks to check
+    
+    class Config:
+        # Ensures that long strings are properly preserved in the documentation
+        schema_extra = {
+            "example": {
+                "code": """
+import os
+import sys
+
+def calculate_factorial(n):
+    if n == 0 or n == 1:
+        return 1
+    else:
+        return n * calculate_factorial(n-1)
+                """,
+                "top_k": 5
+            }
+        }
 
 # Async thread wrapper functions
 async def run_clone_pipeline_in_thread(embed=True):
@@ -276,21 +301,31 @@ async def check_plagiarism(request: PlagiarismCheckRequest):
     Check if the provided code is plagiarized by finding similar code chunks
     and analyzing them with an LLM.
     
+    The code can be multi-line and will be preserved exactly as submitted.
+    
     Args:
-        request: Code to check for plagiarism and parameters
+        request: Request containing the code to check for plagiarism
+        
+    Returns:
+        Plagiarism analysis result with LLM's determination
     """
+    # Log code length for debugging
+    code_length = len(request.code)
+    code_lines = request.code.count('\n') + 1
+    logger.info(f"Received code with {code_length} characters and {code_lines} lines")
+    
     # Ensure vector store is loaded
     if vector_store.index is None:
         try:
             loaded = vector_store.load()
             if not loaded:
-                return {"message": "Vector store is empty or not initialized", "results": []}
+                return {"message": "Vector store is empty or not initialized"}
         except Exception as e:
             logger.error(f"Failed to load vector store: {str(e)}")
-            return {"message": "Failed to load vector store", "results": []}
+            return {"message": "Failed to load vector store"}
 
     try:
-        # Get embedding for the code
+        # Get embedding for the code (handles multi-line code automatically)
         code_embedding = get_embedding(request.code)
         
         # Search for similar code chunks
@@ -299,21 +334,18 @@ async def check_plagiarism(request: PlagiarismCheckRequest):
         # Apply LLM-based plagiarism analysis
         plagiarism_analysis = llm_detector.analyze_similarity(request.code, results)
         
+        # Return a simplified response with only the LLM analysis
         return {
-            "message": f"Found {len(results)} similar code chunks",
-            "code_length": len(request.code),
-            "results": plagiarism_analysis["results"],
-            "plagiarism_analysis": {
-                "summary": plagiarism_analysis["analysis"],
-                "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
-                "confidence": plagiarism_analysis.get("confidence", 0.0),
-                "model_used": plagiarism_analysis.get("llm_model", "unknown")
-            }
+            "plagiarism_detected": plagiarism_analysis["plagiarism_detected"],
+            "analysis": plagiarism_analysis["analysis"],
+            "confidence": plagiarism_analysis.get("confidence", 0.0),
+            "model_used": plagiarism_analysis.get("llm_model", "unknown"),
+            "similar_chunks_count": len(results)
         }
     except Exception as e:
         logger.error(f"Error checking plagiarism: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Plagiarism check failed: {str(e)}")
-
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -113,7 +113,7 @@ class LLMPlagiarismDetector:
         """Generate the prompt for the LLM."""
         prompt = "Please analyze the following query code and determine if it's plagiarized from any of the similar code chunks provided. "
         prompt += "Consider not just exact matches but also code that has been slightly modified or refactored. "
-        prompt += "For each similar code chunk, provide a similarity assessment and explain your reasoning.\n\n"
+        prompt += "Provide a comprehensive analysis considering ALL chunks together, not separate analyses per chunk.\n\n"
         
         prompt += "Query code to analyze:\n```\n" + query_code + "\n```\n\n"
         
@@ -123,14 +123,10 @@ class LLMPlagiarismDetector:
             prompt += f"File: {result['file_name']}\n"
             prompt += "```\n" + result['code'] + "\n```\n\n"
         
-        prompt += "Respond with a JSON object containing:\n"
+        prompt += "Respond with a JSON object containing ONLY:\n"
         prompt += "1. 'plagiarism_detected': boolean indicating if plagiarism is detected\n"
-        prompt += "2. 'analysis': a detailed explanation of your findings\n"
-        prompt += "3. 'individual_assessments': an array of objects, each containing:\n"
-        prompt += "   - 'id': the ID of the similar code chunk\n"
-        prompt += "   - 'is_plagiarism': boolean indicating if this specific chunk is plagiarized\n"
-        prompt += "   - 'explanation': explanation of your assessment for this chunk\n"
-        prompt += "4. 'confidence': a value between 0 and 1 indicating your confidence level\n"
+        prompt += "2. 'analysis': a detailed explanation of your findings, considering ALL chunks together\n"
+        prompt += "3. 'confidence': a value between 0 and 1 indicating your confidence level\n"
         
         return prompt
     
@@ -139,27 +135,13 @@ class LLMPlagiarismDetector:
         try:
             llm_analysis = json.loads(response_content)
             
-            # Merge the original results with LLM analysis
-            enhanced_results = []
-            for i, result in enumerate(similar_results):
-                enhanced_result = dict(result)
-                
-                # Find corresponding assessment
-                for assessment in llm_analysis.get("individual_assessments", []):
-                    if assessment.get("id") == i + 1:
-                        enhanced_result["is_plagiarism"] = assessment.get("is_plagiarism", False)
-                        enhanced_result["explanation"] = assessment.get("explanation", "")
-                        break
-                
-                enhanced_results.append(enhanced_result)
-            
+            # Return a simplified analysis without individual assessments
             return {
                 "plagiarism_detected": llm_analysis.get("plagiarism_detected", False),
                 "analysis": llm_analysis.get("analysis", "Analysis not provided"),
                 "confidence": llm_analysis.get("confidence", 0.0),
-                "results": enhanced_results,
-                "llm_model": self.model,
-                "llm_complete_analysis": llm_analysis
+                "results": similar_results,  # Original results without individual explanations
+                "llm_model": self.model
             }
         except Exception as e:
             logger.error(f"Error processing LLM response: {str(e)}")
