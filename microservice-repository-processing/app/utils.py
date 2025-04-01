@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List, Dict
+from typing import List, Dict, Callable, Optional
 import magic
 import tiktoken
 import json
@@ -77,7 +77,22 @@ def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> i
     return len(encoding.encode(string))
 
 
-def chunk_code(code: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> List[str]:
+def count_tokens_with_huggingface(string: str, tokenizer) -> int:
+    """
+    Returns the number of tokens in a string using a HuggingFace tokenizer.
+    This is a fallback for when we need to use the CodeBERT tokenizer.
+    """
+    if not string.strip():
+        return 0
+    return len(tokenizer.encode(string))
+
+
+def chunk_code(
+    code: str, 
+    chunk_size: int = 510, 
+    chunk_overlap: int = 100, 
+    token_counter: Optional[Callable[[str], int]] = None
+) -> List[str]:
     """
     Splits code into overlapping chunks of tokens, ideally aligned to newlines.
     
@@ -85,11 +100,15 @@ def chunk_code(code: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> L
         code: The code string to split.
         chunk_size: Max tokens per chunk.
         chunk_overlap: Tokens to overlap between chunks.
+        token_counter: Function to count tokens (defaults to tiktoken)
 
     Returns:
         List of chunked code strings.
     """
-    if num_tokens_from_string(code) <= chunk_size:
+    # Use the provided token counter or default to tiktoken
+    counter = token_counter or num_tokens_from_string
+    
+    if counter(code) <= chunk_size:
         return [code]
 
     lines = code.split('\n')
@@ -98,7 +117,7 @@ def chunk_code(code: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> L
     current_size = 0
 
     for line in lines:
-        line_size = num_tokens_from_string(line + '\n')
+        line_size = counter(line + '\n')
 
         if current_size + line_size > chunk_size and current_chunk:
             chunks.append('\n'.join(current_chunk))
@@ -107,7 +126,7 @@ def chunk_code(code: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> L
             overlap_size = 0
             overlap_lines = []
             for prev_line in reversed(current_chunk):
-                size = num_tokens_from_string(prev_line + '\n')
+                size = counter(prev_line + '\n')
                 if overlap_size + size <= chunk_overlap:
                     overlap_lines.insert(0, prev_line)
                     overlap_size += size
@@ -124,4 +143,3 @@ def chunk_code(code: str, chunk_size: int = 1000, chunk_overlap: int = 100) -> L
         chunks.append('\n'.join(current_chunk))
 
     return chunks
-

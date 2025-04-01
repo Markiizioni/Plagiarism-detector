@@ -12,7 +12,7 @@ class CodeVectorStore:
     Stores and retrieves code embeddings using FAISS.
     """
     
-    def __init__(self, vector_dimension: int = 1536):
+    def __init__(self, vector_dimension: int = 768):  # Changed from 1536 to 768 for CodeBERT
         self.vector_dimension = vector_dimension
         self.index = None
         self.metadata = []
@@ -57,14 +57,23 @@ class CodeVectorStore:
             query = np.array([query_embedding], dtype=np.float32)
             distances, indices = self.index.search(query, min(top_k, len(self.metadata)))
 
-            return [
-                {
-                    "chunk": self.chunks[idx],
-                    "metadata": self.metadata[idx],
-                    "distance": float(distances[0][i])
-                }
-                for i, idx in enumerate(indices[0]) if 0 <= idx < len(self.metadata)
-            ]
+            results = []
+            for i, idx in enumerate(indices[0]):
+                if 0 <= idx < len(self.metadata):
+                    # Convert L2 distance to a similarity score (higher is better)
+                    # For CodeBERT, we can use a simple normalization
+                    distance = float(distances[0][i])
+                    max_distance = float(self.vector_dimension)  # Theoretical max L2 distance for normalized vectors
+                    similarity = 1.0 - (distance / max_distance)
+                    
+                    results.append({
+                        "chunk": self.chunks[idx],
+                        "metadata": self.metadata[idx],
+                        "distance": distance,
+                        "similarity": similarity
+                    })
+            
+            return results
         except Exception as e:
             logger.error(f"Search error: {e}")
             return []
@@ -74,6 +83,10 @@ class CodeVectorStore:
         Persist the vector store index and metadata to disk.
         """
         try:
+            if self.index is None:
+                logger.warning("No index to save.")
+                return False
+                
             faiss.write_index(self.index, os.path.join(self.index_path, f"{filename}.index"))
 
             with open(os.path.join(self.index_path, f"{filename}_metadata.json"), "w", encoding="utf-8") as f:
@@ -102,6 +115,7 @@ class CodeVectorStore:
                 return False
 
             self.index = faiss.read_index(index_path)
+            self.vector_dimension = self.index.d  # Update dimension from loaded index
 
             with open(meta_path, "r", encoding="utf-8") as f:
                 self.metadata = json.load(f)
