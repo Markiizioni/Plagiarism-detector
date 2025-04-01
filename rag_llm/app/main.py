@@ -11,7 +11,8 @@ import logging
 
 from app.clone_and_process import get_repository_urls
 from app.cleanup import cleanup_processed_files
-from app.embedder import get_embedding
+# Import from codebert_embedder instead of embedder
+from app.codebert_embedder import get_embedding
 from app.vector_store import create_vector_store
 from app.background_tasks import (
     init_progress, 

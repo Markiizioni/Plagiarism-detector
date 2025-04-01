@@ -94,7 +94,8 @@ def run_clone_thread(repo_urls: Optional[List[str]] = None, embed: bool = True):
         from app.clone_and_process import clone_repositories
         from app.cleanup import cleanup_repositories
         from app.utils import get_all_code_files
-        from app.embedder import create_code_embeddings
+        # Import from codebert_embedder instead of embedder
+        from app.codebert_embedder import create_code_embeddings
         
         # Set repository URLs if provided
         if repo_urls:
@@ -124,7 +125,7 @@ def run_clone_thread(repo_urls: Optional[List[str]] = None, embed: bool = True):
                 update_progress(current_file=current, processed_files=processed_files)
                 logger.info(f"Processing {current} ({processed_files}/{total_files})")
                 
-                # Create embeddings
+                # Create embeddings using CodeBERT
                 file_embeddings = create_code_embeddings(file)
                 all_embeddings.extend(file_embeddings)
                 processed_files += 1
@@ -160,7 +161,8 @@ def run_embedding_thread():
         
         # Import here to avoid circular imports
         from app.utils import get_all_code_files
-        from app.embedder import create_code_embeddings
+        # Import from codebert_embedder instead of embedder
+        from app.codebert_embedder import create_code_embeddings
         from app.main import vector_store
         
         # Count and collect code files for processing
@@ -177,7 +179,7 @@ def run_embedding_thread():
                 logger.info(f"Processing file: {filename} ({index+1}/{total_files})")
                 update_progress(processed_files=index+1, current_file=filename)
                 
-                # Create embeddings for this file
+                # Create embeddings for this file using CodeBERT
                 file_embeddings = create_code_embeddings(file_path)
                 all_embeddings.extend(file_embeddings)
                 

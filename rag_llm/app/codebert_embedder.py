@@ -1,7 +1,8 @@
 import os
 import logging
 from typing import List, Dict, Any
-from openai import OpenAI
+import torch
+from transformers import AutoTokenizer, AutoModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from dotenv import load_dotenv
@@ -13,27 +14,60 @@ load_dotenv()
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# OpenAI configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-MAX_TOKENS_PER_CHUNK = int(os.getenv("MAX_TOKENS_PER_CHUNK", "4000"))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+# CodeBERT configuration
+MODEL_NAME = os.getenv("EMBEDDING_MODEL", "microsoft/codebert-base")
+MAX_TOKENS_PER_CHUNK = int(os.getenv("MAX_TOKENS_PER_CHUNK", "510"))  # CodeBERT has 512 token limit (including special tokens)
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize tokenizer and model
+try:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModel.from_pretrained(MODEL_NAME).to(DEVICE)
+    model.eval()  # Set model to evaluation mode
+    logger.info(f"Loaded CodeBERT model {MODEL_NAME} on {DEVICE}")
+except Exception as e:
+    logger.error(f"Failed to load CodeBERT model: {str(e)}")
+    tokenizer = None
+    model = None
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_embedding(text: str) -> List[float]:
     """
-    Retrieve an embedding for the given text using OpenAI.
+    Retrieve an embedding for the given code text using CodeBERT.
     """
-    if not OPENAI_API_KEY:
-        logger.error("OpenAI API key not found. Please set OPENAI_API_KEY in your environment.")
+    if tokenizer is None or model is None:
+        logger.error("CodeBERT model not initialized correctly.")
         return []
 
     try:
-        response = client.embeddings.create(input=text, model=EMBEDDING_MODEL)
-        return response.data[0].embedding
+        # Truncate text if too long (optional, as chunking should handle this)
+        if len(text) > 10000:  # Arbitrary limit to prevent very long texts
+            logger.warning(f"Text too long ({len(text)} chars), truncating")
+            text = text[:10000]
+        
+        # Tokenize and get model inputs
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, 
+                          max_length=MAX_TOKENS_PER_CHUNK, padding=True)
+        inputs = {key: val.to(DEVICE) for key, val in inputs.items()}
+        
+        # Get embeddings with no gradient calculation needed
+        with torch.no_grad():
+            outputs = model(**inputs)
+            
+        # Use the [CLS] token embedding as the code representation
+        # (alternatively, you could average all token embeddings)
+        embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()[0]
+        
+        # Convert to standard Python list and normalize (optional)
+        embedding_list = embeddings.tolist()
+        
+        # Normalize the embedding (optional but recommended for FAISS)
+        norm = torch.norm(torch.tensor(embedding_list), p=2).item()
+        if norm > 0:
+            embedding_list = [x / norm for x in embedding_list]
+            
+        return embedding_list
     except Exception as e:
         logger.error(f"Embedding request failed: {str(e)}")
         raise
@@ -54,6 +88,10 @@ def create_code_embeddings(file_path: str) -> List[Dict[str, Any]]:
         file_extension = os.path.splitext(file_name)[1][1:]  # Remove dot
         file_size = os.path.getsize(file_path)
 
+        # Use CodeBERT tokenizer to count tokens (different from tiktoken)
+        def count_tokens(text):
+            return len(tokenizer.encode(text))
+
         chunks = chunk_code(code, MAX_TOKENS_PER_CHUNK, CHUNK_OVERLAP)
         logger.info(f"Split {file_path} into {len(chunks)} chunks")
 
@@ -68,7 +106,7 @@ def create_code_embeddings(file_path: str) -> List[Dict[str, Any]]:
                     "file_size": file_size,
                     "chunk_index": i,
                     "total_chunks": len(chunks),
-                    "token_count": num_tokens_from_string(chunk)
+                    "token_count": count_tokens(chunk)
                 }
             }
             for i, chunk in enumerate(chunks)

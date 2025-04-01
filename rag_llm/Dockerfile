@@ -13,8 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python dependencies
+# Install regular Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# ✅ Add this line for stable torch + audio + vision CPU versions
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Create necessary directories
 RUN mkdir -p /app/repositories /app/vector_store
@@ -28,5 +31,5 @@ ENV PYTHONPATH=/app
 # Expose the port that FastAPI will run on
 EXPOSE 8000
 
-# Run the application (this is correct since main.py is in app directory)
+# Run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
