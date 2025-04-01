@@ -1,10 +1,13 @@
 import os
 import logging
 from typing import List, Dict, Any
-from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from dotenv import load_dotenv
+from tenacity import retry, stop_after_attempt, wait_exponential
+import torch
+from transformers import AutoModel, AutoTokenizer
+import numpy as np
+from dotenv import load_dotenv
+
 from app.utils import get_all_code_files, chunk_code, num_tokens_from_string
 
 # Load environment variables
@@ -13,30 +16,59 @@ load_dotenv()
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# OpenAI configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-MAX_TOKENS_PER_CHUNK = int(os.getenv("MAX_TOKENS_PER_CHUNK", "4000"))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+# CodeBERT configuration
+MODEL_NAME = os.getenv("EMBEDDING_MODEL", "microsoft/codebert-base")
+MAX_TOKENS_PER_CHUNK = int(os.getenv("MAX_TOKENS_PER_CHUNK", "510"))  # CodeBERT has 512 token limit (including special tokens)
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Initialize CodeBERT model and tokenizer
+try:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModel.from_pretrained(MODEL_NAME).to(DEVICE)
+    model.eval()
+    logger.info(f"Loaded CodeBERT model: {MODEL_NAME} on {DEVICE}")
+except Exception as e:
+    logger.error(f"Failed to load CodeBERT model: {str(e)}")
+    tokenizer = None
+    model = None
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
 def get_embedding(text: str) -> List[float]:
     """
-    Retrieve an embedding for the given text using OpenAI.
+    Generate an embedding for the given text using CodeBERT.
     """
-    if not OPENAI_API_KEY:
-        logger.error("OpenAI API key not found. Please set OPENAI_API_KEY in your environment.")
+    if model is None or tokenizer is None:
+        logger.error("CodeBERT model or tokenizer not initialized.")
         return []
 
     try:
-        response = client.embeddings.create(input=text, model=EMBEDDING_MODEL)
-        return response.data[0].embedding
+        # Truncate to avoid exceeding token limit
+        if len(text) > 10000:  # Roughly estimate character limit
+            logger.warning(f"Text is too long ({len(text)} chars), truncating...")
+            text = text[:10000]
+        
+        # Tokenize and generate embedding
+        inputs = tokenizer(text, return_tensors="pt", truncation=True, 
+                           max_length=MAX_TOKENS_PER_CHUNK, padding="max_length").to(DEVICE)
+        
+        with torch.no_grad():
+            outputs = model(**inputs)
+            
+        # Use CLS token embedding (first token) as the representation
+        embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy().flatten()
+        return embeddings.tolist()
     except Exception as e:
-        logger.error(f"Embedding request failed: {str(e)}")
+        logger.error(f"Embedding generation failed: {str(e)}")
         raise
+
+def mean_pooling(model_output, attention_mask):
+    """
+    Perform mean pooling on token embeddings.
+    """
+    token_embeddings = model_output.last_hidden_state
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 def create_code_embeddings(file_path: str) -> List[Dict[str, Any]]:
     """
