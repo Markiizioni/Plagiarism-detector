@@ -1,12 +1,14 @@
+# Load environment variables
 import os
+import json
 import logging
 from typing import List, Dict, Any, Optional
-import json
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 from dotenv import load_dotenv
 
-# Load environment variables
+from app.utils import normalize_code
+
 load_dotenv()
 
 # Configure logging
@@ -159,3 +161,7 @@ class LLMPlagiarismDetector:
             "confidence": 0.5,
             "is_fallback": True
         }
+
+# Factory function for easy instantiation
+def create_plagiarism_detector():
+    return LLMPlagiarismDetector()

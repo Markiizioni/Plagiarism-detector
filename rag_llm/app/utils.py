@@ -5,6 +5,7 @@ import magic
 import tiktoken
 import json
 import time
+import regex as re
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -25,6 +26,37 @@ IGNORED_EXTENSIONS = {
 }
 
 MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
+
+MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
+
+def normalize_code(code: str) -> str:
+    """
+    Normalize code by:
+    - Removing comments
+    - Converting to lowercase
+    - Normalizing indentation and whitespace
+    """
+    if not isinstance(code, str):
+        code = str(code)
+
+    # Remove single-line comments
+    code = re.sub(r'(//.*?$)|(#.*?$)', '', code, flags=re.MULTILINE)
+    
+    # Remove multi-line comments
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
+    
+    # Remove docstrings
+    code = re.sub(r'""".*?"""', '', code, flags=re.DOTALL)
+    code = re.sub(r"'''.*?'''", '', code, flags=re.DOTALL)
+    
+    # Normalize indentation (convert to spaces, standardize)
+    lines = [line.strip() for line in code.split('\n') if line.strip()]
+    
+    # Convert to lowercase
+    lines = [line.lower() for line in lines]
+    
+    # Normalize indentation
+    return '\n'.join(lines)
 
 
 def get_file_extension(file_path: str) -> str:

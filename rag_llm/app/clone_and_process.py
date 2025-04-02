@@ -6,7 +6,7 @@ import shutil
 from typing import List, Dict
 from dotenv import load_dotenv
 
-from app.utils import is_valid_code_file, get_file_extension
+from app.utils import is_valid_code_file, get_file_extension, normalize_code
 
 # Load environment variables
 load_dotenv()
@@ -50,17 +50,9 @@ def clone_repository(repo_url: str) -> str:
         shutil.rmtree(temp_dir, ignore_errors=True)
         return None
 
+
+
 def extract_code_files(repo_path: str, base_dir: str) -> Dict[str, List[str]]:
-    """
-    Extract valid code files from the repository and categorize them by extension.
-    
-    Args:
-        repo_path: The local path to the cloned repository.
-        base_dir: Destination base directory to organize files by type.
-        
-    Returns:
-        A dictionary mapping file extensions to lists of new file paths.
-    """
     categorized_files = {}
     if not repo_path:
         return categorized_files
@@ -81,13 +73,22 @@ def extract_code_files(repo_path: str, base_dir: str) -> Dict[str, List[str]]:
             ext_dir = os.path.join(base_dir, ext)
             os.makedirs(ext_dir, exist_ok=True)
 
-            rel_path = os.path.relpath(file_path, repo_path)
-            new_file_name = f"{repo_name}_{rel_path.replace(os.sep, '_')}"
-            new_file_path = os.path.join(ext_dir, new_file_name)
+            # Read and normalize the file content
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    normalized_code = normalize_code(f.read())
+                
+                rel_path = os.path.relpath(file_path, repo_path)
+                new_file_name = f"{repo_name}_{rel_path.replace(os.sep, '_')}"
+                new_file_path = os.path.join(ext_dir, new_file_name)
 
-            shutil.copy2(file_path, new_file_path)
+                # Write normalized code
+                with open(new_file_path, 'w', encoding='utf-8') as f:
+                    f.write(normalized_code)
 
-            categorized_files.setdefault(ext, []).append(new_file_path)
+                categorized_files.setdefault(ext, []).append(new_file_path)
+            except Exception as e:
+                logger.error(f"Error processing file {file_path}: {str(e)}")
 
     return categorized_files
 
