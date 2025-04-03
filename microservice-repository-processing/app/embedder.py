@@ -6,7 +6,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-from app.utils import get_all_code_files, chunk_code, num_tokens_from_string
+from app.utils import get_all_code_files, chunk_code, num_tokens_from_string, normalize_code
 
 # Load environment variables
 load_dotenv()
@@ -55,6 +55,7 @@ def get_embedding(text: str) -> List[float]:
         logger.error(f"Embedding generation failed: {str(e)}")
         raise
 
+
 def create_code_embeddings(file_path: str) -> List[Dict[str, Any]]:
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
@@ -63,12 +64,16 @@ def create_code_embeddings(file_path: str) -> List[Dict[str, Any]]:
     try:
         with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
             code = f.read()
+        
+        # Add normalization step
+        normalized_code = normalize_code(code)
 
         file_name = os.path.basename(file_path)
         file_extension = os.path.splitext(file_name)[1][1:]
         file_size = os.path.getsize(file_path)
 
-        chunks = chunk_code(code, MAX_TOKENS_PER_CHUNK, CHUNK_OVERLAP)
+        # Use normalized code for chunking
+        chunks = chunk_code(normalized_code, MAX_TOKENS_PER_CHUNK, CHUNK_OVERLAP)
         logger.info(f"Split {file_path} into {len(chunks)} chunks")
 
         return [

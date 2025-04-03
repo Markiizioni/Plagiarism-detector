@@ -23,6 +23,8 @@ from app.background_tasks import (
 )
 
 from app.similarity_threshold import SimilarityAnalyzer
+from app.utils import normalize_code  # Add this import
+
 
 # Load environment variables
 load_dotenv()
@@ -398,8 +400,11 @@ async def find_similar_code(request: CodeSimilarityRequest):
             return {"message": "Vector store is empty or not initialized", "results": []}
 
     try:
-        # Get embedding for the code
-        code_embedding = get_embedding(request.code)
+        # Normalize the input code first
+        normalized_code = normalize_code(request.code)
+        
+        # Get embedding for the normalized code
+        code_embedding = get_embedding(normalized_code)
         
         # Search for similar code chunks
         results = vector_store.search(code_embedding, request.top_k)
