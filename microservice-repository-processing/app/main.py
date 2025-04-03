@@ -111,8 +111,8 @@ async def run_embedding_in_thread():
 async def root():
     return {"message": "Repository Processing Microservice", "status": "running"}
 
-@app.post("/clone")
-async def clone_repos(
+@app.post("/clone-and-process")
+async def clone_and_process_repos(
     background_tasks: BackgroundTasks, 
     request: RepositoryRequest = None,
     embed: bool = True
