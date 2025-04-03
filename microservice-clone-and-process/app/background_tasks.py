@@ -94,7 +94,7 @@ def run_clone_thread(repo_urls: Optional[List[str]] = None, embed: bool = True):
         from app.clone_and_process import clone_repositories
         from app.cleanup import cleanup_repositories
         from app.utils import get_all_code_files
-        from app.embedder import create_code_embeddings
+        from app.codebert_embedder import create_code_embeddings
         
         # Set repository URLs if provided
         if repo_urls:
@@ -160,7 +160,7 @@ def run_embedding_thread():
         
         # Import here to avoid circular imports
         from app.utils import get_all_code_files
-        from app.embedder import create_code_embeddings
+        from app.codebert_embedder import create_code_embeddings
         from app.main import vector_store
         
         # Count and collect code files for processing

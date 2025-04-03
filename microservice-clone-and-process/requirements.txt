@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+httpx
+python-dotenv
+gitpython
+torch
+transformers
+numpy
+faiss-cpu
+python-magic
+tiktoken
+openai
+pydantic
+tenacity

@@ -3,8 +3,6 @@ import logging
 from typing import List, Dict, Callable, Optional
 import magic
 import tiktoken
-import json
-import time
 import re 
 
 # Configure logging
@@ -26,7 +24,6 @@ IGNORED_EXTENSIONS = {
 }
 
 MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
-
 
 def normalize_code(code: str) -> str:
     """
@@ -57,12 +54,10 @@ def normalize_code(code: str) -> str:
     # Normalize indentation
     return '\n'.join(lines)
 
-
 def get_file_extension(file_path: str) -> str:
     """Returns the file extension (without dot), or filename if none."""
     _, ext = os.path.splitext(file_path)
     return ext[1:].lower() if ext else os.path.basename(file_path)
-
 
 def is_binary_file(file_path: str) -> bool:
     """Detects if a file is binary using python-magic."""
@@ -72,7 +67,6 @@ def is_binary_file(file_path: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking if file is binary: {str(e)}")
         return True  # Assume binary if detection fails
-
 
 def is_valid_code_file(file_path: str) -> bool:
     """Checks if the given file should be treated as code."""
@@ -90,7 +84,6 @@ def is_valid_code_file(file_path: str) -> bool:
 
     return True
 
-
 def get_all_code_files(directory: str) -> List[str]:
     """Recursively collects all valid code files from the given directory."""
     code_files = []
@@ -101,12 +94,10 @@ def get_all_code_files(directory: str) -> List[str]:
                 code_files.append(path)
     return code_files
 
-
 def num_tokens_from_string(string: str, encoding_name: str = "cl100k_base") -> int:
     """Returns the number of tokens in a string using the specified encoding."""
     encoding = tiktoken.get_encoding(encoding_name)
     return len(encoding.encode(string))
-
 
 def count_tokens_with_huggingface(string: str, tokenizer) -> int:
     """
@@ -116,7 +107,6 @@ def count_tokens_with_huggingface(string: str, tokenizer) -> int:
     if not string.strip():
         return 0
     return len(tokenizer.encode(string))
-
 
 def chunk_code(
     code: str, 
