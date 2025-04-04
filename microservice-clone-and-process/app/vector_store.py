@@ -32,7 +32,8 @@ class CodeVectorStore:
             vectors = np.array([item["embedding"] for item in embeddings_data], dtype=np.float32)
 
             if self.index is None:
-                self.index = faiss.IndexFlatL2(self.vector_dimension)
+                # Use IndexFlatIP because all embeddings are unit-normalized
+                self.index = faiss.IndexFlatIP(self.vector_dimension)
 
             self.index.add(vectors)
 
