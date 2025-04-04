@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  clone-and-process:
+    build: 
+      context: ./microservice-clone-and-process
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./repositories:/app/repositories
+      - ./vector_store:/app/vector_store
+    env_file:
+      - ./microservice-clone-and-process/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  combined-approach:
+    build: 
+      context: ./microservice-combined-approach
+    ports:
+      - "8001:8000"
+    depends_on:
+      - clone-and-process
+    env_file:
+      - ./microservice-combined-approach/.env
+    environment:
+      - PROCESSING_SERVICE_URL=http://clone-and-process:8000
+      - PYTHONUNBUFFERED=1
+
+  llm-evaluator:
+    build: 
+      context: ./microservice-llm-evaluator
+    ports:
+      - "8002:8000"
+    depends_on:
+      - clone-and-process
+    env_file:
+      - ./microservice-llm-evaluator/.env
+    environment:
+      - PROCESSING_SERVICE_URL=http://clone-and-process:8000
+      - PYTHONUNBUFFERED=1
+
+  threshold-evaluator:
+    build: 
+      context: ./microservice-threshold-evaluator
+    ports:
+      - "8003:8000"
+    depends_on:
+      - clone-and-process
+    env_file:
+      - ./microservice-threshold-evaluator/.env
+    environment:
+      - PROCESSING_SERVICE_URL=http://clone-and-process:8000
+      - PYTHONUNBUFFERED=1
+
+networks:
+  default:
+    driver: bridge
