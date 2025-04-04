@@ -22,21 +22,45 @@ The system is implemented in three progressively more advanced variations:
 ## 🏗️ Project Structure
 
 ```
-code-plagiarism-detection/
-├── llm-only/               # Direct LLM approach
-├── vector-similarity/      # Vector database approach 
-├── hybrid-retrieval/       # Vector + LLM approach
-└── common/                 # Shared utilities and components
+plagiarism-detector/
+├── .venv/                         # Virtual environment
+├── evaluation/                    # Evaluation tools and results
+├── microservice-clone-and-process/  # Preprocessing and indexing service
+├── microservice-combined-approach/  # Hybrid retrieval-augmented LLM approach
+├── microservice-llm-evaluator/    # LLM-only approach
+├── microservice-threshold-evaluator/ # Vector similarity threshold approach
+├── docker-compose.yml            # Main compose file for all services
+└── requirements.txt              # Common dependencies
 ```
 
+## 🚀 Getting Started
 
-## 📊 Evaluation
 
-Approaches are evaluated based on:
-- Accuracy in detecting real plagiarism cases
-- False positive rate
-- Computational efficiency
-- Scalability with increasing repository size
+1. Start the services:
+   ```bash
+   docker-compose up -d
+   ```
+
+3. Access the services:
+   - Combined approach: http://localhost:8001/check-plagiarism
+   - LLM-only: http://localhost:8002/check
+   - Threshold approach: http://localhost:8003/search-similar
+
+## 🔬 Running Evaluations
+
+The `evaluation` directory contains a Docker-based tool for comprehensive evaluation:
+
+```bash
+cd evaluation
+chmod +x run.sh
+./run.sh
+```
+
+For more detailed evaluation with more test cases:
+```bash
+LIMIT=50 ./run.sh  # Evaluates on 50 test cases
+LIMIT=0 ./run.sh   # Evaluates on all test cases
+```
 
 ## 🔍 Use Cases
 
@@ -44,11 +68,3 @@ Approaches are evaluated based on:
 - Open source license compliance
 - Internal code quality assurance
 - Programming education
-
-## 🤝 Contributing
-
-Contributions are welcome! See the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines.
-
----
-
-Each approach folder contains a detailed README with setup instructions and architectural explanations.
