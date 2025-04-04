@@ -147,6 +147,55 @@ async def cleanup(clear_vector_store: Optional[bool] = False):
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/status")
+async def get_status():
+    """
+    Get the status of processed repositories and vector store.
+    """
+    try:
+        repositories_dir = os.path.join(os.getcwd(), "repositories")
+        logger.info(f"Checking repositories directory at: {os.path.abspath(repositories_dir)}")
+        
+        # Check if repositories directory exists
+        if not os.path.exists(repositories_dir):
+            logger.warning(f"Repositories directory does not exist at: {os.path.abspath(repositories_dir)}")
+            return {"status": "No repositories processed yet", "directory_checked": os.path.abspath(repositories_dir)}
+        
+        # List all items in the repository directory
+        all_items = os.listdir(repositories_dir)
+        logger.info(f"Items in repositories directory: {all_items}")
+        
+        # Get all extensions and file counts
+        extensions = {}
+        for item in all_items:
+            item_path = os.path.join(repositories_dir, item)
+            if os.path.isdir(item_path):
+                try:
+                    file_count = len(os.listdir(item_path))
+                    extensions[item] = file_count
+                except Exception as e:
+                    logger.error(f"Error accessing directory {item_path}: {str(e)}")
+        
+        # Get vector store statistics
+        vector_store_stats = vector_store.get_stats()
+        
+        # Get current progress
+        progress_data = load_progress()
+        
+        return {
+            "status": "Repositories processed",
+            "directory_checked": os.path.abspath(repositories_dir),
+            "items_in_directory": all_items,
+            "file_extensions": extensions,
+            "total_files": sum(extensions.values()) if extensions else 0,
+            "vector_store_stats": vector_store_stats,
+            "current_working_directory": os.getcwd(),
+            "processing_status": progress_data["status"]
+        }
+    except Exception as e:
+        logger.error(f"Error getting status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Status check failed: {str(e)}")
 
 @app.get("/progress")
 async def get_current_progress():
