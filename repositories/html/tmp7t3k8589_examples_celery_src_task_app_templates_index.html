@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset=utf-8>
+<title>celery example</title>
+</head>
+<body>
+<h2>celery example</h2>
+execute background tasks with celery. submits tasks and shows results using javascript.
+<hr>
+<h4>add</h4>
+<p>start a task to add two numbers, then poll for the result.
+<form id=add method=post action="{{ url_for("tasks.add") }}">
+<label>a <input type=number name=a value=4></label><br>
+<label>b <input type=number name=b value=2></label><br>
+<input type=submit>
+</form>
+<p>result: <span id=add-result></span></p>
+<hr>
+<h4>block</h4>
+<p>start a task that takes 5 seconds. however, the response will return immediately.
+<form id=block method=post action="{{ url_for("tasks.block") }}">
+<input type=submit>
+</form>
+<p id=block-result></p>
+<hr>
+<h4>process</h4>
+<p>start a task that counts, waiting one second each time, showing progress.
+<form id=process method=post action="{{ url_for("tasks.process") }}">
+<label>total <input type=number name=total value="10"></label><br>
+<input type=submit>
+</form>
+<p id=process-result></p>
+<script>
+const taskform = (formname, dopoll, report) => {
+document.forms[formname].addeventlistener("submit", (event) => {
+event.preventdefault()
+fetch(event.target.action, {
+method: "post",
+body: new formdata(event.target)
+})
+.then(response => response.json())
+.then(data => {
+report(null)
+const poll = () => {
+fetch(`/tasks/result/${data["result_id"]}`)
+.then(response => response.json())
+.then(data => {
+report(data)
+if (!data["ready"]) {
+settimeout(poll, 500)
+} else if (!data["successful"]) {
+console.error(formname, data)
+}
+})
+}
+if (dopoll) {
+poll()
+}
+})
+})
+}
+taskform("add", true, data => {
+const el = document.getelementbyid("add-result")
+if (data === null) {
+el.innertext = "submitted"
+} else if (!data["ready"]) {
+el.innertext = "waiting"
+} else if (!data["successful"]) {
+el.innertext = "error, check console"
+} else {
+el.innertext = data["value"]
+}
+})
+taskform("block", false, data => {
+document.getelementbyid("block-result").innertext = (
+"request finished, check celery log to see task finish in 5 seconds"
+)
+})
+taskform("process", true, data => {
+const el = document.getelementbyid("process-result")
+if (data === null) {
+el.innertext = "submitted"
+} else if (!data["ready"]) {
+el.innertext = `${data["value"]["current"]} / ${data["value"]["total"]}`
+} else if (!data["successful"]) {
+el.innertext = "error, check console"
+} else {
+el.innertext = "✅ done"
+}
+console.log(data)
+})
+</script>
+</body>
+</html>

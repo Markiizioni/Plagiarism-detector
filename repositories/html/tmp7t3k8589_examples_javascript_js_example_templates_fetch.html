@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block intro %}
+<a href="https:
+is the <em>modern</em> plain javascript way to make requests. it's
+supported in all modern browsers.
+{% endblock %}
+{% block script %}
+<script>
+function addsubmit(ev) {
+ev.preventdefault();
+fetch({{ url_for('add')|tojson }}, {
+method: 'post',
+body: new formdata(this)
+})
+.then(parsejson)
+.then(addshow);
+}
+function parsejson(response) {
+return response.json();
+}
+function addshow(data) {
+var span = document.getelementbyid('result');
+span.innertext = data.result;
+}
+var form = document.getelementbyid('calc');
+form.addeventlistener('submit', addsubmit);
+</script>
+{% endblock %}

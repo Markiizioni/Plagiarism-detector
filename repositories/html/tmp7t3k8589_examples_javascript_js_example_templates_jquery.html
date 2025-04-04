@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block intro %}
+<a href="https:
+adds cross browser apis for common tasks. however, it requires loading
+an extra library.
+{% endblock %}
+{% block script %}
+<script src="https:
+<script>
+function addsubmit(ev) {
+ev.preventdefault();
+$.ajax({
+method: 'post',
+url: {{ url_for('add')|tojson }},
+data: $(this).serialize()
+}).done(addshow);
+}
+function addshow(data) {
+$('
+}
+$('
+</script>
+{% endblock %}

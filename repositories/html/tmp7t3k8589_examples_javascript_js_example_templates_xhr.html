@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block intro %}
+<a href="https:
+is the original javascript way to make requests. it's natively supported
+by all browsers, but has been superseded by
+<a href="{{ url_for("index", js="fetch") }}"><code>fetch</code></a>.
+{% endblock %}
+{% block script %}
+<script>
+function addsubmit(ev) {
+ev.preventdefault();
+var request = new xmlhttprequest();
+request.addeventlistener('load', addshow);
+request.open('post', {{ url_for('add')|tojson }});
+request.send(new formdata(this));
+}
+function addshow() {
+var data = json.parse(this.responsetext);
+var span = document.getelementbyid('result');
+span.innertext = data.result;
+}
+var form = document.getelementbyid('calc');
+form.addeventlistener('submit', addsubmit);
+</script>
+{% endblock %}

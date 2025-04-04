@@ -1,0 +1,32 @@
+<!doctype html>
+<title>javascript example</title>
+<link rel="stylesheet" href="https:
+<link rel="stylesheet" href="https:
+<style>
+ul { margin: 0; padding: 0; display: flex; list-style-type: none; }
+li > * { padding: 1em; }
+li.active > a { color:
+form { display: flex; }
+label > input { width: 3em; }
+form > * { padding-right: 1em; }
+</style>
+<ul>
+<li><span>type:</span>
+<li class="{% if js == 'fetch' %}active{% endif %}">
+<a href="{{ url_for('index', js='fetch') }}">fetch</a>
+<li class="{% if js == 'xhr' %}active{% endif %}">
+<a href="{{ url_for('index', js='xhr') }}">xhr</a>
+<li class="{% if js == 'jquery' %}active{% endif %}">
+<a href="{{ url_for('index', js='jquery') }}">jquery</a>
+</ul>
+<hr>
+<p>{% block intro %}{% endblock %}</p>
+<hr>
+<form id="calc">
+<label>a <input name="a"></label>
+<span>+</span>
+<label>b <input name="b"></label>
+<input type="submit" value="calculate">
+</form>
+<span>= <span id="result"></span></span>
+{% block script %}{% endblock %}
