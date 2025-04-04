@@ -1,155 +1,159 @@
-# 🧠 Hybrid Retrieval-Augmented LLM Plagiarism Detection
+# 🔢 Threshold-Based Code Plagiarism Detection Microservice
 
-This module implements the most advanced approach to code plagiarism detection by combining vector similarity search with LLM-based analysis for highly accurate results.
+This microservice implements a vector similarity-based approach to detect code plagiarism by comparing input code against a database of embeddings. It relies on similarity thresholds to determine plagiarism without using language models.
 
-## 🧩 How It Works
+---
 
-1. The system maintains a database of code from various repositories
-2. Source code files are automatically extracted, normalized, and categorized by programming language
-3. Normalized code is chunked, embedded using CodeBERT, and stored in a FAISS vector database
-4. When new code is submitted for checking:
-   - It's normalized, embedded, and compared against the vector database
-   - The top most similar code chunks are retrieved
-   - These chunks, along with the query code, are sent to an LLM (GPT-3.5/4)
-   - The LLM performs a detailed plagiarism analysis considering code semantics and patterns
-5. A comprehensive plagiarism report is generated with human-readable explanations
+## 🔍 Key Features
 
-## 🏗️ Architecture
+- **Calculate code similarity** using vector embeddings
+- **Apply configurable thresholds** to determine plagiarism
+- **Retrieve similar code chunks** from a FAISS vector store
+- **Provide detailed similarity scores** and matching code
+- **Dockerized for ease of deployment**
 
-The system consists of multiple integrated components:
+---
 
-- **Repository Management**: Clones GitHub repositories and extracts code files
-- **Code Normalization**: Standardizes code by removing comments, whitespace variations, and case sensitivity
-- **Vector Embedding**: Creates vector embeddings using CodeBERT for efficient similarity search
-- **Vector Store**: FAISS-powered database for fast retrieval of similar code
-- **LLM Analyzer**: Uses OpenAI's models to analyze potential plagiarism with human-like understanding
-- **API Layer**: FastAPI endpoints for code submission and analysis
+## 🔁 Workflow Overview
 
-## 🛠️ Setup and Installation
-
-### Prerequisites
-- Python 3.8+
-- OpenAI API key
-- CUDA-compatible GPU (optional, for faster embedding generation)
-
-### Installation
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env file with your API keys and configuration
+```
+Client Input Code
+        ↓
+Generate Code Embedding
+        ↓
+Search Similar Code Chunks in Vector Database
+        ↓
+Apply Similarity Thresholds 
+        ↓
+Return Results (similar chunks, similarity scores, plagiarism determination)
 ```
 
-### Environment Variables
-```
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-3.5-turbo
-OPENAI_TEMPERATURE=0.0
+---
 
-# Repository Sources
-GITHUB_REPOSITORIES=https://github.com/repo1/example,https://github.com/repo2/example
+## 📦 API Endpoints
 
-# Embedding Configuration
+| Method | Endpoint              | Description                                 |
+|--------|-----------------------|---------------------------------------------|
+| GET    | `/health`             | Health check                                |
+| POST   | `/search-similar`     | Search for similar code and analyze similarity |
+
+---
+
+## 🛠️ Usage with Docker
+
+### 1. Set up `.env`
+
+```env
+VECTOR_DB_PATH=/app/data/vector_db
+THRESHOLD_HIGH=0.95
+THRESHOLD_MEDIUM=0.85
+THRESHOLD_LOW=0.75
 EMBEDDING_MODEL=microsoft/codebert-base
-MAX_TOKENS_PER_CHUNK=510
-CHUNK_OVERLAP=100
 ```
 
-## 🚀 Usage
+### 2. Docker Compose
 
-### Starting the Service
-```bash
-uvicorn main:app --reload
+```yaml
+services:
+  threshold-evaluator:
+    build:
+      context: .
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### API Endpoints
+### 3. Start it
 
-#### 1. Plagiarism Check
 ```bash
-curl -X POST http://localhost:8000/check-plagiarism \
+docker-compose up --build
+```
+
+---
+
+## 🧠 How It Works
+
+- Accepts code as input (`/search-similar`)
+- Normalizes the code to standardize formatting
+- Generates vector embedding for the input code
+- Searches for similar code chunks in the FAISS database
+- Applies configurable thresholds to determine plagiarism
+- Returns detailed similarity information and matched code chunks
+
+---
+
+## 📁 File Structure
+
+```
+.
+├── app/
+│   ├── __init__.py              # Package initialization
+│   ├── __pycache__/             # Python cache
+│   ├── main.py                  # FastAPI app
+│   ├── similarity_threshold.py  # Threshold-based analyzer
+│   ├── utils.py                 # Code normalization utilities
+├── .env                         # Configuration variables
+├── .gitignore                   # Git ignore patterns
+├── Dockerfile                   # Container instructions
+├── docker-compose.yml           # Multi-container setup
+├── README.md                    # This documentation
+├── requirements.txt             # Python dependencies
+```
+
+---
+
+## 📝 Example Request
+
+```bash
+curl -X POST http://localhost:8003/search-similar \
   -H "Content-Type: application/json" \
   -d '{
-    "code": "YOUR_CODE_HERE",
-    "top_k": 5
+    "code": "def factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)",
+    "top_k": 10,
+    "analyze_plagiarism": true
   }'
 ```
 
-#### 2. Managing Code Repository
-```bash
-# Clone and process repositories (extract, normalize, and embed - default behavior)
-curl -X POST http://localhost:8000/clone-and-process
+## 📝 Example Response
 
-# Clone and process repositories without generating embeddings
-curl -X POST http://localhost:8000/clone-and-process?embed=false
-
-# Check status of repositories and vector store (shows file counts by language)
-curl -X GET http://localhost:8000/status
-```
-
-### Response Format
-
-#### Plagiarism Check Response
 ```json
 {
-  "plagiarism_detected": true,
-  "analysis": "The submitted code appears to be plagiarized from repository X. While variable names have been changed, the overall structure, algorithm, and implementation logic are nearly identical to the original code. Specific matches include the function 'calculate_factorial' which has only superficial modifications.",
-  "confidence": 0.92,
-  "model_used": "gpt-3.5-turbo",
-  "similar_chunks_count": 3
+  "message": "Found 10 similar code chunks",
+  "query_code_length": 87,
+  "results": [
+    {
+      "chunk": "def factorial(n):\n    if n == 0:\n        return 1\n    else:\n        return n * factorial(n-1)",
+      "metadata": {
+        "file_path": "/app/repositories/py/example_repo/math_utils.py",
+        "file_name": "math_utils.py",
+        "file_extension": "py",
+        "file_size": 421,
+        "chunk_index": 3,
+        "total_chunks": 12,
+        "token_count": 28
+      },
+      "distance": 0.03241,
+      "similarity": 0.96759,
+      "category": "high"
+    },
+    // Additional similar code chunks...
+  ],
+  "plagiarism_analysis": {
+    "summary": "Potential plagiarism detected with high similarity",
+    "plagiarism_detected": true,
+    "high_similarity_count": 3,
+    "medium_similarity_count": 5,
+    "low_similarity_count": 2
+  }
 }
 ```
 
-## ⚙️ Implementation Details
+---
 
-### Code Normalization
-- Removes comments (single-line, multi-line, and docstrings)
-- Converts code to lowercase
-- Normalizes whitespace and indentation
-- Makes it harder to evade detection with superficial changes
+## 📄 License
 
-### Vector Similarity
-- Uses Microsoft's CodeBERT (768-dimensional vectors) for code-specific embeddings
-- FAISS (Facebook AI Similarity Search) for efficient similarity search
-- Retrieved similar code chunks serve as context for the LLM
-
-### LLM Analysis
-- Prompt engineering designed specifically for plagiarism detection
-- LLM analyzes multiple code chunks together for more accurate assessment
-- Returns structured analysis with confidence score
-- Tenacity-based retry mechanism for API resilience
-
-## ⚖️ Advantages and Limitations
-
-### Advantages
-- Most accurate of all three approaches
-- Understands code semantics, not just structural similarity
-- Provides human-readable explanation of plagiarism findings
-- Can detect sophisticated forms of plagiarism (renamed variables, reordered functions, etc.)
-- Assigns confidence levels to plagiarism determinations
-- Robust against simple code obfuscation techniques
-
-### Limitations
-- Most resource-intensive and costly of all three approaches
-- Requires OpenAI API key and incurs usage costs
-- Higher latency due to LLM API call
-- Limited by the size of embedded repository (can only find what it knows)
-- LLM context window restricts the number of code chunks that can be analyzed
-
-## 📊 Performance Expectations
-
-- Typical response time: 1-3 seconds
-- Accuracy on test plagiarism dataset: ~92%
-- False positive rate: ~5%
-- API cost: ~$0.001-0.02 per query (depending on OpenAI model used)
-
-## 🔄 Next Steps
-
-- Implement more sophisticated code normalization techniques
-- Add support for multi-language plagiarism detection
-- Create a fine-tuned model specifically for code plagiarism detection
-- Implement caching to reduce API costs for repeated queries
-- Develop a feedback mechanism to improve detection over time
-- Add support for batch processing of multiple files
+Licensed under the [MIT License](LICENSE)
