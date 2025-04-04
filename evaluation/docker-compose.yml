@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  evaluator:
+    build: .
+    volumes:
+      - ./data:/data
+      - ./results:/results
+    command: [
+      "--test-file", "/data/test_cases.jsonl",
+      "--combined-api", "${COMBINED_API_URL:-http://host.docker.internal:8001/check-plagiarism}",
+      "--llm-api", "${LLM_API_URL:-http://host.docker.internal:8002/check}",
+      "--threshold-api", "${THRESHOLD_API_URL:-http://host.docker.internal:8003/search-similar}",
+      "--output-dir", "/results"
+    ]
