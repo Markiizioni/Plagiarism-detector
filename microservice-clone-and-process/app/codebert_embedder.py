@@ -56,13 +56,12 @@ def get_embedding(text: str) -> List[float]:
             outputs = model(**inputs)
             
         # Use the [CLS] token embedding as the code representation
-        # (alternatively, you could average all token embeddings)
         embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()[0]
         
         # Convert to standard Python list and normalize (optional)
         embedding_list = embeddings.tolist()
         
-        # Normalize the embedding (optional but recommended for FAISS)
+        # Normalize the embedding 
         norm = torch.norm(torch.tensor(embedding_list), p=2).item()
         if norm > 0:
             embedding_list = [x / norm for x in embedding_list]

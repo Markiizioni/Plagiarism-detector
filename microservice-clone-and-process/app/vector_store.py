@@ -12,7 +12,7 @@ class CodeVectorStore:
     Stores and retrieves code embeddings using FAISS.
     """
     
-    def __init__(self, vector_dimension: int = 768):  # Changed from 1536 to 768 for CodeBERT
+    def __init__(self, vector_dimension: int = 768):
         self.vector_dimension = vector_dimension
         self.index = None
         self.metadata = []

@@ -7,7 +7,7 @@ import httpx
 from dotenv import load_dotenv
 
 from app.similarity_threshold import SimilarityAnalyzer
-from app.utils import normalize_code  # Assuming normalize_code is in app/utils.py
+from app.utils import normalize_code 
 
 # Load environment variables
 load_dotenv()
